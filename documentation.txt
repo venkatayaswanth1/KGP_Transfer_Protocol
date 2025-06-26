@@ -1,0 +1,161 @@
+KTP Socket Implementation Documentation
+=======================================
+
+Data Structures
+---------------
+
+1. KTPHeader (in ksocket.h)
+   - unsigned char seq_num: Sequence number of the packet
+   - unsigned char rwnd_size: Receiver window size
+   - unsigned char is_ack: Flag to indicate if it's an acknowledgment packet
+   - unsigned char is_nospace: Flag to indicate no space in receiver buffer
+
+
+2. KTPSocket (in ksocket.h)
+   Fields:
+   - int is_free: Indicates if the socket is available
+   - pid_t pid: Process ID of the socket owner
+   - int udp_socket: Underlying UDP socket descriptor
+   - struct sockaddr_in local_addr: Local socket address
+   - struct sockaddr_in remote_addr: Remote socket address
+   - char send_buffer[BUFFER_SIZE][MESSAGE_SIZE]: Send-side message buffer
+   - char recv_buffer[BUFFER_SIZE][MESSAGE_SIZE]: Receive-side message buffer
+   - int send_buffer_size: Current size of send buffer
+   - int recv_buffer_size: Current size of receive buffer
+   
+   Nested Structures:
+   a. swnd (Send Window)
+      - int size: Current send window size
+      - unsigned char seq_nums[BUFFER_SIZE]: Sequence numbers of sent messages
+      - time_t send_times[BUFFER_SIZE]: Timestamps of sent messages
+   
+   b. rwnd (Receive Window)
+      - int size: Current receive window size
+      - unsigned char seq_nums[BUFFER_SIZE]: Sequence numbers of received messages
+
+   Additional Fields:
+   - unsigned char last_ack_seq: Last acknowledged sequence number
+   - int nospace_flag: Flag to indicate no space in receive buffer
+
+Functions in ksocket.c
+----------------------
+
+1. Initialization and Memory Management:
+   - init_shared_memory(): 
+     * Creates and initializes shared memory segment
+     * Sets up initial socket states
+     * Prepares file descriptor sets
+
+2. Socket Management Functions:
+   - k_socket(): 
+     * Creates a new KTP socket
+     * Initializes socket structures
+     * Creates receiver and sender threads
+     * Manages global sequence numbers
+
+   - k_bind(): 
+     * Binds socket to local and remote addresses
+     * Sets up UDP socket binding
+
+   - k_sendto(): 
+     * Adds message to send buffer
+     * Manages send window
+     * Handles message transmission
+
+   - k_recvfrom(): 
+     * Retrieves messages from receive buffer
+     * Manages in-order message extraction
+     * Handles window size updates
+
+   - k_close(): 
+     * Closes socket
+     * Cleans up resources
+     * Marks socket as free
+
+3. Communication Thread Functions:
+   - receiver_thread(): 
+     * Handles incoming messages
+     * Processes data and ACK packets
+     * Manages out-of-order message buffering
+     * Sends acknowledgments
+
+   - sender_thread(): 
+     * Manages message transmission
+     * Handles retransmissions
+     * Manages send window
+     * Sends new messages
+
+4. Utility Functions:
+   - send_ack(): 
+     * Creates and sends acknowledgment packets
+     * Updates window sizes
+
+   - dropMessage(): 
+     * Simulates packet loss for testing
+     * Randomly drops messages based on probability
+
+Functions in initksocket.c
+--------------------------
+
+1. main():
+   - Initializes shared memory
+   - Creates receiver and sender threads
+   - Keeps the process running
+   - Provides a central point for KTP socket system initialization
+
+Global Variables
+----------------
+
+1. shared_memory: 
+   - Pointer to shared memory segment
+   - Stores socket states and buffers
+
+2. mutex: 
+   - Pthread mutex for thread synchronization
+   - Protects shared memory access
+
+3. read_fds, write_fds: 
+   - File descriptor sets for socket monitoring
+   - Used in select() for message reception
+
+4. max_fd: 
+   - Tracks maximum file descriptor
+   - Used in select() call
+
+5. seq_managers: 
+   - Manages sequence numbers for each socket
+   - Tracks send and receive sequence states
+
+Constant Definitions
+--------------------
+
+1. SOCK_KTP: Custom socket type for KTP protocol
+2. MAX_KTP_SOCKETS: Maximum number of simultaneous KTP sockets
+3. MESSAGE_SIZE: Size of each message (512 bytes)
+4. BUFFER_SIZE: Maximum number of messages in window (10)
+5. T: Timeout duration (5 seconds)
+6. P: Packet loss probability
+
+Error Handling
+--------------
+
+Custom error codes:
+- ENOSPACE: No space in buffer
+- ENOTBOUND: Socket not bound to correct address
+- ENOMESSAGE: No message available
+
+Key Protocol Mechanisms
+----------------------
+
+1. Sliding Window Flow Control
+2. Sequence Number Management
+3. Retransmission on Timeout
+4. Out-of-Order Message Handling
+5. Duplicate Message Detection
+
+Synchronization Mechanisms
+--------------------------
+
+1. Mutex-based thread synchronization
+2. Shared memory for inter-thread communication
+3. Select()-based socket monitoring
